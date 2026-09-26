@@ -10,7 +10,19 @@ set(COMMON_SOURCES
     src/launcher.cpp
 )
 
+# 引入 WebView2 的 NuGet 包（Windows）
 if(WIN32)
+    include(FetchContent)
+    FetchContent_Declare(
+        webview2
+        URL https://www.nuget.org/api/v2/package/Microsoft.Web.WebView2/1.0.2592.51
+        DOWNLOAD_EXTRACT_TIMESTAMP TRUE
+    )
+    FetchContent_MakeAvailable(webview2)
+
+    set(WEBVIEW2_INCLUDE_DIR ${webview2_SOURCE_DIR}/build/native/include)
+    set(WEBVIEW2_LIB_DIR ${webview2_SOURCE_DIR}/build/native/x64)
+
     list(APPEND COMMON_SOURCES src/browser_win.cpp)
     add_executable(container WIN32 ${COMMON_SOURCES})
 
@@ -20,7 +32,11 @@ if(WIN32)
     set_property(TARGET container PROPERTY
         MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 
+    target_include_directories(container PRIVATE ${WEBVIEW2_INCLUDE_DIR})
+    target_link_directories(container PRIVATE ${WEBVIEW2_LIB_DIR})
+
     target_link_libraries(container PRIVATE
+        WebView2LoaderStatic.lib
         ole32 oleaut32 shlwapi comctl32 user32 gdi32)
 
     target_compile_definitions(container PRIVATE
