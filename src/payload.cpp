@@ -38,12 +38,24 @@ std::string GetSelfPath() {
 
 bool ReadSelfPayload(Payload& out) {
     std::string self = GetSelfPath();
+
+    {
+        std::ofstream log("C:\\container_log.txt", std::ios::app);
+        log << "[payload] self 路径: " << self << std::endl;
+        log << "[payload] 文件是否存在: " << (std::ifstream(self).good() ? "yes" : "no") << std::endl;
+    }
+
     if (self.empty()) return false;
 
     std::ifstream file(self, std::ios::binary | std::ios::ate);
     if (!file) return false;
 
     std::streamsize total = file.tellg();
+    {
+        std::ofstream log("C:\\container_log.txt", std::ios::app);
+        log << "[payload] 文件总大小: " << total << std::endl;
+    }
+
     if (total < MAGIC_LEN + 16) return false;
 
     std::streamsize scanSize = (std::min)((std::streamsize)65536, total);
@@ -71,6 +83,18 @@ bool ReadSelfPayload(Payload& out) {
         }
     }
 
+    {
+        std::ofstream log("C:\\container_log.txt", std::ios::app);
+        log << "[payload] magicPos: " << magicPos << " (scanSize=" << scanSize << ")" << std::endl;
+        log << "[payload] 尾部前 20 字节: ";
+        for (int i = 0; i < 20 && i < scanSize; i++) {
+            char buf[8];
+            snprintf(buf, sizeof(buf), "%02X ", (unsigned char)tail[i]);
+            log << buf;
+        }
+        log << std::endl;
+    }
+
     if (magicPos < 0) return false;
 
     int hp = magicPos + MAGIC_LEN;
@@ -78,6 +102,11 @@ bool ReadSelfPayload(Payload& out) {
     memcpy(&tLen, tail.data() + hp, 8);
     memcpy(&hLen, tail.data() + hp + 8, 8);
     int64_t dataStart = hp + 16;
+
+    {
+        std::ofstream log("C:\\container_log.txt", std::ios::app);
+        log << "[payload] tLen: " << tLen << ", hLen: " << hLen << std::endl;
+    }
 
     out.target.resize((size_t)tLen);
     if (dataStart + tLen <= scanSize) {
