@@ -6,6 +6,11 @@
 #include <string>
 #include <fstream>
 
+static void Log(const std::string& msg) {
+    std::ofstream log("C:\\container_log.txt", std::ios::app);
+    log << "[browser_win] " << msg << std::endl;
+}
+
 static CComPtr<IWebBrowser2> g_browser;
 static HWND g_hwnd = NULL;
 static std::function<void()> g_onLaunch;
@@ -52,8 +57,11 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM w, LPARAM l) {
 }
 
 void ShowBrowser(const std::string& html, std::function<void()> onLaunch) {
+    Log("ShowBrowser 开始");
     g_onLaunch = onLaunch;
+
     CoInitialize(NULL);
+    Log("CoInitialize 完成");
 
     HINSTANCE hInst = GetModuleHandle(NULL);
     WNDCLASSW wc = {};
@@ -63,26 +71,34 @@ void ShowBrowser(const std::string& html, std::function<void()> onLaunch) {
     wc.hCursor = LoadCursor(NULL, IDC_ARROW);
     wc.hbrBackground = (HBRUSH)GetStockObject(WHITE_BRUSH);
     RegisterClassW(&wc);
+    Log("RegisterClass 完成");
 
     g_hwnd = CreateWindowExW(0, L"ShellContainerWindow", L"启动中",
         WS_OVERLAPPEDWINDOW, CW_USEDEFAULT, CW_USEDEFAULT, 900, 600,
         NULL, NULL, hInst, NULL);
+    Log("CreateWindow 完成");
 
     ShowWindow(g_hwnd, SW_SHOWMAXIMIZED);
     UpdateWindow(g_hwnd);
+    Log("ShowWindow 完成");
 
     CComPtr<IWebBrowser2> browser;
-    CoCreateInstance(CLSID_WebBrowser, NULL, CLSCTX_INPROC_SERVER,
+    HRESULT hr = CoCreateInstance(CLSID_WebBrowser, NULL, CLSCTX_INPROC_SERVER,
                      IID_IWebBrowser2, (void**)&browser);
+    Log("CoCreateInstance hr=" + std::to_string(hr));
+    if (FAILED(hr)) {
+        Log("CoCreateInstance 失败");
+        return;
+    }
 
     RECT rc; GetClientRect(g_hwnd, &rc);
     browser->put_Width(rc.right - rc.left);
     browser->put_Height(rc.bottom - rc.top);
 
-    // 把 web browser 嵌入窗口
     CComPtr<IOleObject> ole;
     browser->QueryInterface(IID_IOleObject, (void**)&ole);
     ole->DoVerb(OLEIVERB_SHOW, NULL, NULL, 0, g_hwnd, &rc);
+    Log("DoVerb 完成");
 
     // 注册 window.external
     CComPtr<IDispatch> disp;
@@ -90,44 +106,6 @@ void ShowBrowser(const std::string& html, std::function<void()> onLaunch) {
     if (disp) {
         CComPtr<IHTMLDocument2> doc;
         if (SUCCEEDED(disp->QueryInterface(IID_IHTMLDocument2, (void**)&doc)) && doc) {
-            // IHTMLDocument2 继承自 IDispatch，put_script 需要通过 IDispatch 调用
-            // 直接写 HTML 到 document 最简单的方式是用 IPersistStreamInit
-            // 但我们用更简单的方式：把 HTML 存文件再导航过去
-        }
-    }
-
-    // 把 HTML 写到临时文件
-    wchar_t tmpPath[MAX_PATH];
-    GetTempPathW(MAX_PATH, tmpPath);
-    std::wstring htmlFile = std::wstring(tmpPath) + L"shell_html_"
-        + std::to_wstring(GetTickCount()) + L".html";
-
-    {
-        std::ofstream out(htmlFile, std::ios::binary);
-        out.write(html.data(), html.size());
-    }
-
-    // 导航到该 HTML 文件
-    std::wstring fileUrl = L"file:///" + htmlFile;
-    for (auto& ch : fileUrl) if (ch == L'\\') ch = L'/';
-
-    VARIANT vEmpty; VariantInit(&vEmpty);
-    browser->Navigate2(&CComVariant(fileUrl.c_str()), &vEmpty, &vEmpty, &vEmpty, &vEmpty);
-
-    g_browser = browser;
-
-    // 导航完成后注册 window.external
-    // 用计时器轮询检查 document 是否就绪
-    // 由于没有消息循环，这里简单 Sleep + 尝试
-    Sleep(500);
-
-    browser->get_Document(&disp);
-    if (disp) {
-        CComPtr<IHTMLDocument2> doc;
-        if (SUCCEEDED(disp->QueryInterface(IID_IHTMLDocument2, (void**)&doc)) && doc) {
-            // put_script 在 IHTMLDocument2 上实际不可用（ATL 未导出），
-            // 用 IDispatch 的 GetIDsOfNames + Invoke 调用
-            // 简化方案：直接通过 IDispatch 接口调用 put_script
             LPOLESTR name = (LPOLESTR)L"Script";
             DISPID dispid;
             if (SUCCEEDED(doc->GetIDsOfNames(IID_NULL, &name, 1, LOCALE_USER_DEFAULT, &dispid))) {
@@ -138,15 +116,43 @@ void ShowBrowser(const std::string& html, std::function<void()> onLaunch) {
                 DISPPARAMS params = { &arg, NULL, 1, 0 };
                 doc->Invoke(dispid, IID_NULL, LOCALE_USER_DEFAULT,
                             DISPATCH_PROPERTYPUT, &params, NULL, NULL, NULL);
+                Log("window.external 注册完成");
+            } else {
+                Log("GetIDsOfNames 失败");
             }
         }
+    } else {
+        Log("get_Document 返回空");
     }
+
+    // 写 HTML 到临时文件
+    wchar_t tmpPath[MAX_PATH];
+    GetTempPathW(MAX_PATH, tmpPath);
+    std::wstring htmlFile = std::wstring(tmpPath) + L"shell_html_"
+        + std::to_wstring(GetTickCount()) + L".html";
+    {
+        std::ofstream out(htmlFile, std::ios::binary);
+        out.write(html.data(), html.size());
+    }
+    Log("HTML 已写临时文件");
+
+    std::wstring fileUrl = L"file:///" + htmlFile;
+    for (auto& ch : fileUrl) if (ch == L'\\') ch = L'/';
+
+    VARIANT vEmpty; VariantInit(&vEmpty);
+    browser->Navigate2(&CComVariant(fileUrl.c_str()), &vEmpty, &vEmpty, &vEmpty, &vEmpty);
+    Log("Navigate2 完成");
+
+    g_browser = browser;
+    Log("ShowBrowser 结束");
 }
 
 void RunMessageLoop() {
+    Log("RunMessageLoop 进入");
     MSG msg;
     while (GetMessage(&msg, NULL, 0, 0)) {
         TranslateMessage(&msg);
         DispatchMessage(&msg);
     }
+    Log("RunMessageLoop 退出");
 }
