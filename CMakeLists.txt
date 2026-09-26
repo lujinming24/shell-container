@@ -28,7 +28,7 @@ if(WIN32)
 
 elseif(APPLE)
     list(APPEND COMMON_SOURCES src/browser_mac.mm)
-    add_executable(container MACOSX_BUNDLE ${COMMON_SOURCES})
+    add_executable(container ${COMMON_SOURCES})
 
     target_link_libraries(container PRIVATE
         "-framework Cocoa"
