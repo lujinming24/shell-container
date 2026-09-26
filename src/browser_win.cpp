@@ -4,6 +4,7 @@
 #include <exdisp.h>
 #include <mshtml.h>
 #include <string>
+#include <fstream>
 
 static CComPtr<IWebBrowser2> g_browser;
 static HWND g_hwnd = NULL;
@@ -78,47 +79,68 @@ void ShowBrowser(const std::string& html, std::function<void()> onLaunch) {
     browser->put_Width(rc.right - rc.left);
     browser->put_Height(rc.bottom - rc.top);
 
+    // 把 web browser 嵌入窗口
     CComPtr<IOleObject> ole;
     browser->QueryInterface(IID_IOleObject, (void**)&ole);
     ole->DoVerb(OLEIVERB_SHOW, NULL, NULL, 0, g_hwnd, &rc);
 
+    // 注册 window.external
     CComPtr<IDispatch> disp;
     browser->get_Document(&disp);
     if (disp) {
         CComPtr<IHTMLDocument2> doc;
-        disp->QueryInterface(IID_IHTMLDocument2, (void**)&doc);
-        if (doc) doc->put_script(&g_external);
+        if (SUCCEEDED(disp->QueryInterface(IID_IHTMLDocument2, (void**)&doc)) && doc) {
+            // IHTMLDocument2 继承自 IDispatch，put_script 需要通过 IDispatch 调用
+            // 直接写 HTML 到 document 最简单的方式是用 IPersistStreamInit
+            // 但我们用更简单的方式：把 HTML 存文件再导航过去
+        }
     }
+
+    // 把 HTML 写到临时文件
+    wchar_t tmpPath[MAX_PATH];
+    GetTempPathW(MAX_PATH, tmpPath);
+    std::wstring htmlFile = std::wstring(tmpPath) + L"shell_html_"
+        + std::to_wstring(GetTickCount()) + L".html";
+
+    {
+        std::ofstream out(htmlFile, std::ios::binary);
+        out.write(html.data(), html.size());
+    }
+
+    // 导航到该 HTML 文件
+    std::wstring fileUrl = L"file:///" + htmlFile;
+    for (auto& ch : fileUrl) if (ch == L'\\') ch = L'/';
+
+    VARIANT vEmpty; VariantInit(&vEmpty);
+    browser->Navigate2(&CComVariant(fileUrl.c_str()), &vEmpty, &vEmpty, &vEmpty, &vEmpty);
 
     g_browser = browser;
 
-    std::wstring htmlW(html.begin(), html.end());
-    BSTR bstr = SysAllocString(htmlW.c_str());
-
-    VARIANT vEmpty; VariantInit(&vEmpty);
-    browser->Navigate2(&CComVariant(L"about:blank"), &vEmpty, &vEmpty, &vEmpty, &vEmpty);
-    Sleep(200);
+    // 导航完成后注册 window.external
+    // 用计时器轮询检查 document 是否就绪
+    // 由于没有消息循环，这里简单 Sleep + 尝试
+    Sleep(500);
 
     browser->get_Document(&disp);
     if (disp) {
         CComPtr<IHTMLDocument2> doc;
-        disp->QueryInterface(IID_IHTMLDocument2, (void**)&doc);
-        if (doc) {
-            CComPtr<IHTMLWindow2> win;
-            doc->get_parentWindow(&win);
-            if (win) {
-                SAFEARRAY* sa = SafeArrayCreateVector(VT_VARIANT, 0, 1);
-                VARIANT* pv;
-                SafeArrayAccessData(sa, (void**)&pv);
-                pv->vt = VT_BSTR;
-                pv->bstrVal = bstr;
-                SafeArrayUnaccessData(sa);
-                win->execScript(L"document.write", L"JavaScript", sa);
-                SafeArrayDestroy(sa);
+        if (SUCCEEDED(disp->QueryInterface(IID_IHTMLDocument2, (void**)&doc)) && doc) {
+            // put_script 在 IHTMLDocument2 上实际不可用（ATL 未导出），
+            // 用 IDispatch 的 GetIDsOfNames + Invoke 调用
+            // 简化方案：直接通过 IDispatch 接口调用 put_script
+            LPOLESTR name = (LPOLESTR)L"Script";
+            DISPID dispid;
+            if (SUCCEEDED(doc->GetIDsOfNames(IID_NULL, &name, 1, LOCALE_USER_DEFAULT, &dispid))) {
+                VARIANT arg;
+                VariantInit(&arg);
+                arg.vt = VT_DISPATCH;
+                arg.pdispVal = &g_external;
+                DISPPARAMS params = { &arg, NULL, 1, 0 };
+                doc->Invoke(dispid, IID_NULL, LOCALE_USER_DEFAULT,
+                            DISPATCH_PROPERTYPUT, &params, NULL, NULL, NULL);
             }
         }
     }
-    SysFreeString(bstr);
 }
 
 void RunMessageLoop() {
