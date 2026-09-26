@@ -11,7 +11,10 @@
 
 static void Log(const std::string& msg) {
 #ifdef _WIN32
-    std::ofstream log("C:\\container_log.txt", std::ios::app);
+    char path[MAX_PATH];
+    GetEnvironmentVariableA("USERPROFILE", path, MAX_PATH);
+    std::string logPath = std::string(path) + "\\container_log.txt";
+    std::ofstream log(logPath, std::ios::app);
     log << msg << std::endl;
 #endif
 }
