@@ -63,8 +63,9 @@ void ShowBrowser(const std::string& html, std::function<void()> onLaunch) {
     Log("ShowBrowser 开始");
     g_onLaunch = onLaunch;
 
-    HRESULT hrInit = CoInitialize(NULL);
-    Log("CoInitialize hr=" + std::to_string(hrInit));
+    CoInitialize(NULL);
+    OleInitialize(NULL);
+    Log("CoInitialize/OleInitialize 完成");
 
     HINSTANCE hInst = GetModuleHandle(NULL);
     WNDCLASSW wc = {};
@@ -101,18 +102,18 @@ void ShowBrowser(const std::string& html, std::function<void()> onLaunch) {
     CComPtr<IOleObject> ole;
     browser->QueryInterface(IID_IOleObject, (void**)&ole);
     if (ole) {
-        ole->DoVerb(OLEIVERB_SHOW, NULL, NULL, 0, g_hwnd, &rc);
+        ole->DoVerb(OLEIVERB_INPLACEACTIVATE, NULL, NULL, 0, g_hwnd, &rc);
     }
     Log("DoVerb 完成");
 
-    // 先导航到 about:blank，让 document 存在
+    Sleep(500);
+
     VARIANT vEmpty; VariantInit(&vEmpty);
     HRESULT hrNav0 = browser->Navigate2(&CComVariant(L"about:blank"), &vEmpty, &vEmpty, &vEmpty, &vEmpty);
     Log("Navigate2 about:blank hr=" + std::to_string(hrNav0));
 
     Sleep(300);
 
-    // 注册 window.external
     CComPtr<IDispatch> disp;
     browser->get_Document(&disp);
     if (disp) {
@@ -137,7 +138,6 @@ void ShowBrowser(const std::string& html, std::function<void()> onLaunch) {
         Log("get_Document 返回空");
     }
 
-    // 写 HTML 到临时文件（加 BOM）
     wchar_t tmpPath[MAX_PATH];
     GetTempPathW(MAX_PATH, tmpPath);
     std::wstring htmlFile = std::wstring(tmpPath) + L"shell_html_"
