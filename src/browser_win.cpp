@@ -7,7 +7,10 @@
 #include <fstream>
 
 static void Log(const std::string& msg) {
-    std::ofstream log("C:\\container_log.txt", std::ios::app);
+    char path[MAX_PATH];
+    GetEnvironmentVariableA("USERPROFILE", path, MAX_PATH);
+    std::string logPath = std::string(path) + "\\container_log.txt";
+    std::ofstream log(logPath, std::ios::app);
     log << "[browser_win] " << msg << std::endl;
 }
 
@@ -60,8 +63,8 @@ void ShowBrowser(const std::string& html, std::function<void()> onLaunch) {
     Log("ShowBrowser 开始");
     g_onLaunch = onLaunch;
 
-    CoInitialize(NULL);
-    Log("CoInitialize 完成");
+    HRESULT hrInit = CoInitialize(NULL);
+    Log("CoInitialize hr=" + std::to_string(hrInit));
 
     HINSTANCE hInst = GetModuleHandle(NULL);
     WNDCLASSW wc = {};
@@ -73,10 +76,10 @@ void ShowBrowser(const std::string& html, std::function<void()> onLaunch) {
     RegisterClassW(&wc);
     Log("RegisterClass 完成");
 
-    g_hwnd = CreateWindowExW(0, L"ShellContainerWindow", L"启动中",
+    g_hwnd = CreateWindowExW(0, L"ShellContainerWindow", L"Loading",
         WS_OVERLAPPEDWINDOW, CW_USEDEFAULT, CW_USEDEFAULT, 900, 600,
         NULL, NULL, hInst, NULL);
-    Log("CreateWindow 完成");
+    Log("CreateWindow 完成, hwnd=" + std::to_string((long long)(intptr_t)g_hwnd));
 
     ShowWindow(g_hwnd, SW_SHOWMAXIMIZED);
     UpdateWindow(g_hwnd);
@@ -97,8 +100,17 @@ void ShowBrowser(const std::string& html, std::function<void()> onLaunch) {
 
     CComPtr<IOleObject> ole;
     browser->QueryInterface(IID_IOleObject, (void**)&ole);
-    ole->DoVerb(OLEIVERB_SHOW, NULL, NULL, 0, g_hwnd, &rc);
+    if (ole) {
+        ole->DoVerb(OLEIVERB_SHOW, NULL, NULL, 0, g_hwnd, &rc);
+    }
     Log("DoVerb 完成");
+
+    // 先导航到 about:blank，让 document 存在
+    VARIANT vEmpty; VariantInit(&vEmpty);
+    HRESULT hrNav0 = browser->Navigate2(&CComVariant(L"about:blank"), &vEmpty, &vEmpty, &vEmpty, &vEmpty);
+    Log("Navigate2 about:blank hr=" + std::to_string(hrNav0));
+
+    Sleep(300);
 
     // 注册 window.external
     CComPtr<IDispatch> disp;
@@ -125,13 +137,15 @@ void ShowBrowser(const std::string& html, std::function<void()> onLaunch) {
         Log("get_Document 返回空");
     }
 
-    // 写 HTML 到临时文件
+    // 写 HTML 到临时文件（加 BOM）
     wchar_t tmpPath[MAX_PATH];
     GetTempPathW(MAX_PATH, tmpPath);
     std::wstring htmlFile = std::wstring(tmpPath) + L"shell_html_"
         + std::to_wstring(GetTickCount()) + L".html";
     {
         std::ofstream out(htmlFile, std::ios::binary);
+        const unsigned char bom[] = { 0xEF, 0xBB, 0xBF };
+        out.write((const char*)bom, 3);
         out.write(html.data(), html.size());
     }
     Log("HTML 已写临时文件");
@@ -139,9 +153,8 @@ void ShowBrowser(const std::string& html, std::function<void()> onLaunch) {
     std::wstring fileUrl = L"file:///" + htmlFile;
     for (auto& ch : fileUrl) if (ch == L'\\') ch = L'/';
 
-    VARIANT vEmpty; VariantInit(&vEmpty);
-    browser->Navigate2(&CComVariant(fileUrl.c_str()), &vEmpty, &vEmpty, &vEmpty, &vEmpty);
-    Log("Navigate2 完成");
+    HRESULT hrNav = browser->Navigate2(&CComVariant(fileUrl.c_str()), &vEmpty, &vEmpty, &vEmpty, &vEmpty);
+    Log("Navigate2 完成 hr=" + std::to_string(hrNav));
 
     g_browser = browser;
     Log("ShowBrowser 结束");
@@ -151,6 +164,10 @@ void RunMessageLoop() {
     Log("RunMessageLoop 进入");
     MSG msg;
     while (GetMessage(&msg, NULL, 0, 0)) {
+        if (msg.message == WM_QUIT) {
+            Log("收到 WM_QUIT，退出消息循环");
+            break;
+        }
         TranslateMessage(&msg);
         DispatchMessage(&msg);
     }
