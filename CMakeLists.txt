@@ -14,6 +14,9 @@ if(WIN32)
     list(APPEND COMMON_SOURCES src/browser_win.cpp)
     add_executable(container WIN32 ${COMMON_SOURCES})
 
+    set_target_properties(container PROPERTIES
+        LINK_FLAGS "/ENTRY:wWinMainCRTStartup")
+
     set_property(TARGET container PROPERTY
         MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 
