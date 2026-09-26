@@ -40,7 +40,7 @@ elseif(UNIX)
 
     find_package(PkgConfig REQUIRED)
     pkg_check_modules(GTK REQUIRED gtk+-3.0)
-    pkg_check_modules(WEBKIT REQUIRED webkit2gtk-4.0)
+    pkg_check_modules(WEBKIT REQUIRED webkit2gtk-4.1)
 
     add_executable(container ${COMMON_SOURCES})
 
