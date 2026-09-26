@@ -38,92 +38,41 @@ std::string GetSelfPath() {
 
 bool ReadSelfPayload(Payload& out) {
     std::string self = GetSelfPath();
-
-    {
-        std::ofstream log("C:\\container_log.txt", std::ios::app);
-        log << "[payload] self 路径: " << self << std::endl;
-        log << "[payload] 文件是否存在: " << (std::ifstream(self).good() ? "yes" : "no") << std::endl;
-    }
-
     if (self.empty()) return false;
 
     std::ifstream file(self, std::ios::binary | std::ios::ate);
     if (!file) return false;
 
     std::streamsize total = file.tellg();
-    {
-        std::ofstream log("C:\\container_log.txt", std::ios::app);
-        log << "[payload] 文件总大小: " << total << std::endl;
-    }
+    // 末尾至少有：MAGIC(12) + tLen(8) + hLen(8) = 28 字节
+    if (total < 28) return false;
 
-    if (total < MAGIC_LEN + 16) return false;
+    // 读最后 28 字节
+    file.seekg(total - 28);
+    char tail[28];
+    file.read(tail, 28);
 
-    std::streamsize scanSize = (std::min)((std::streamsize)65536, total);
-    std::vector<char> tail((size_t)scanSize);
-    file.seekg(total - scanSize);
-    file.read(tail.data(), scanSize);
+    // 校验 MAGIC
+    if (memcmp(tail, MAGIC, 12) != 0) return false;
 
-    int magicPos = -1;
-    for (int i = (int)scanSize - MAGIC_LEN - 1; i >= 0; i--) {
-        if (memcmp(tail.data() + i, MAGIC, MAGIC_LEN) == 0) {
-            int hp = i + MAGIC_LEN;
-            if (hp + 16 > scanSize) continue;
-
-            int64_t tLen, hLen;
-            memcpy(&tLen, tail.data() + hp, 8);
-            memcpy(&hLen, tail.data() + hp + 8, 8);
-
-            if (tLen <= 0 || hLen < 0) continue;
-
-            int64_t expectEnd = (total - scanSize) + hp + 16 + tLen + hLen;
-            if (expectEnd != total) continue;
-
-            magicPos = i;
-            break;
-        }
-    }
-
-    {
-        std::ofstream log("C:\\container_log.txt", std::ios::app);
-        log << "[payload] magicPos: " << magicPos << " (scanSize=" << scanSize << ")" << std::endl;
-        log << "[payload] 尾部前 20 字节: ";
-        for (int i = 0; i < 20 && i < scanSize; i++) {
-            char buf[8];
-            snprintf(buf, sizeof(buf), "%02X ", (unsigned char)tail[i]);
-            log << buf;
-        }
-        log << std::endl;
-    }
-
-    if (magicPos < 0) return false;
-
-    int hp = magicPos + MAGIC_LEN;
     int64_t tLen, hLen;
-    memcpy(&tLen, tail.data() + hp, 8);
-    memcpy(&hLen, tail.data() + hp + 8, 8);
-    int64_t dataStart = hp + 16;
+    memcpy(&tLen, tail + 12, 8);
+    memcpy(&hLen, tail + 20, 8);
 
-    {
-        std::ofstream log("C:\\container_log.txt", std::ios::app);
-        log << "[payload] tLen: " << tLen << ", hLen: " << hLen << std::endl;
-    }
+    if (tLen <= 0 || hLen < 0) return false;
+    if (28 + tLen + hLen > total) return false;
 
+    int64_t dataStart = total - 28 - tLen - hLen;
+
+    // 读目标 exe
     out.target.resize((size_t)tLen);
-    if (dataStart + tLen <= scanSize) {
-        memcpy(out.target.data(), tail.data() + dataStart, (size_t)tLen);
-    } else {
-        file.seekg(total - scanSize + dataStart);
-        file.read((char*)out.target.data(), tLen);
-    }
+    file.seekg(dataStart);
+    file.read((char*)out.target.data(), tLen);
 
+    // 读 HTML
     out.html.resize((size_t)hLen);
-    int64_t htmlOffset = dataStart + tLen;
-    if (htmlOffset + hLen <= scanSize) {
-        memcpy(&out.html[0], tail.data() + htmlOffset, (size_t)hLen);
-    } else {
-        file.seekg(total - scanSize + htmlOffset);
-        file.read(&out.html[0], hLen);
-    }
+    file.seekg(dataStart + tLen);
+    file.read(&out.html[0], hLen);
 
     return true;
 }
