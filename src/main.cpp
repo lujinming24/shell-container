@@ -42,6 +42,7 @@ static int RunApp() {
     });
     Log("ShowBrowser 返回");
 
+    Log("准备进入消息循环");
     RunMessageLoop();
     Log("RunMessageLoop 返回");
     return 0;
