@@ -4,7 +4,11 @@
 #include <cstdio>
 #include <cstdlib>
 
-int main(int argc, char** argv) {
+#ifdef _WIN32
+#include <windows.h>
+#endif
+
+static int RunApp() {
     Payload payload;
     if (!ReadSelfPayload(payload)) {
         fprintf(stderr, "无壳数据\n");
@@ -19,3 +23,13 @@ int main(int argc, char** argv) {
     RunMessageLoop();
     return 0;
 }
+
+#ifdef _WIN32
+int WINAPI wWinMain(HINSTANCE, HINSTANCE, LPWSTR, int) {
+    return RunApp();
+}
+#else
+int main(int argc, char** argv) {
+    return RunApp();
+}
+#endif
