@@ -10,13 +10,39 @@ namespace Container
 {
     class Program
     {
+        static Stopwatch _sw = new Stopwatch();
+
+        static void Log(string msg)
+        {
+            try
+            {
+                File.AppendAllText(@"C:\container_timing.log",
+                    DateTime.Now.ToString("HH:mm:ss.fff") +
+                    "  +" + _sw.ElapsedMilliseconds + "ms  " +
+                    msg + "\r\n");
+            }
+            catch { }
+        }
+
         [STAThread]
         static void Main(string[] args)
         {
+            // 清空旧日志
+            try { File.Delete(@"C:\container_timing.log"); } catch { }
+
+            _sw.Start();
+            Log("=== 程序开始 ===");
+
+            Log("开始读 payload");
             var payload = Payload.ReadSelf();
+            Log("payload 读取完成 target=" + (payload.target?.Length ?? 0) +
+                " html=" + (payload.html?.Length ?? 0) +
+                " logic=" + (payload.logicDll?.Length ?? 0) +
+                " wv2=" + (payload.wv2?.Length ?? 0));
 
             if (payload.target == null || payload.html == null)
             {
+                Log("无壳数据，弹提示窗口");
                 var w = new PhotinoWindow()
                     .SetTitle("Container")
                     .SetUseOsDefaultSize(false)
@@ -26,18 +52,31 @@ namespace Container
                 w.LoadRawString(
                     "<h1 style='font-family:sans-serif;text-align:center;" +
                     "padding-top:40px'>无壳数据</h1>");
+                Log("无壳数据窗口已创建，等关闭");
                 w.WaitForClose();
+                Log("无壳数据窗口关闭");
                 return;
             }
 
             if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows) && !IsWebView2Installed())
             {
+                Log("WebView2 未安装，开始安装");
                 if (!TryInstallWebView2(payload.wv2))
+                {
+                    Log("WebView2 安装失败");
                     return;
+                }
+                Log("WebView2 安装完成");
+            }
+            else
+            {
+                Log("WebView2 已安装或非 Windows 平台");
             }
 
+            Log("开始加载 Logic.dll");
             var logicHost = new LogicHost();
             bool logicLoaded = logicHost.Load(payload.logicDll);
+            Log("Logic.dll 加载完成 loaded=" + logicLoaded);
 
             string injectScript = @"
 <script>
@@ -54,6 +93,7 @@ if (window.external && window.external.receiveMessage) {
 </script>";
 
             string finalHtml = payload.html + injectScript;
+            Log("准备创建 Photino 窗口");
 
             PhotinoWindow? window = null;
 
@@ -78,9 +118,18 @@ if (window.external && window.external.receiveMessage) {
                     }
                 });
 
+            Log("PhotinoWindow 构造完成（链式调用结束）");
+
             window.SetLogVerbosity(0);
+            Log("SetLogVerbosity 完成");
+
+            Log("准备 LoadRawString");
             window.LoadRawString(finalHtml);
+            Log("LoadRawString 完成");
+
+            Log("准备进入 WaitForClose");
             window.WaitForClose();
+            Log("=== 窗口关闭，程序退出 ===");
         }
 
         [SupportedOSPlatform("windows")]
