@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Text;
+using Microsoft.Win32;
 using Photino.NET;
 
 namespace Container
@@ -14,7 +15,17 @@ namespace Container
         [STAThread]
         static void Main(string[] args)
         {
-            var (targetBytes, html, width, height) = ReadSelf();
+            // 1. Windows 上先检查 WebView2
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows) && !IsWebView2Installed())
+            {
+                if (!TryInstallWebView2())
+                {
+                    Console.WriteLine("WebView2 安装失败或用户取消");
+                    return;
+                }
+            }
+
+            var (targetBytes, html, wv2Unused, width, height) = ReadSelf();
 
             if (targetBytes == null || html == null)
             {
@@ -51,32 +62,84 @@ if (typeof launch !== 'function') {
             window.WaitForClose();
         }
 
-        static (byte[]? target, string? html, int width, int height) ReadSelf()
+        // 检查注册表是否有 WebView2
+        static bool IsWebView2Installed()
+        {
+            try
+            {
+                using var hklm = RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, RegistryView.Registry32);
+                using var k1 = hklm.OpenSubKey(@"SOFTWARE\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}");
+                if (k1 != null) return true;
+
+                using var hkcu = RegistryKey.OpenBaseKey(RegistryHive.CurrentUser, RegistryView.Registry32);
+                using var k2 = hkcu.OpenSubKey(@"SOFTWARE\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}");
+                if (k2 != null) return true;
+            }
+            catch { }
+            return false;
+        }
+
+        // 释放并静默安装 WebView2
+        static bool TryInstallWebView2()
+        {
+            try
+            {
+                var (_, _, wv2Bytes, _, _) = ReadSelf();
+                if (wv2Bytes == null || wv2Bytes.Length == 0)
+                    return false;
+
+                string tmp = Path.Combine(Path.GetTempPath(),
+                    "WebView2Setup_" + Guid.NewGuid().ToString("N") + ".exe");
+                File.WriteAllBytes(tmp, wv2Bytes);
+
+                var psi = new ProcessStartInfo
+                {
+                    FileName = tmp,
+                    Arguments = "/silent /install",
+                    UseShellExecute = false,
+                    CreateNoWindow = true
+                };
+                var p = Process.Start(psi);
+                p.WaitForExit();
+
+                try { File.Delete(tmp); } catch { }
+
+                return p.ExitCode == 0;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        static (byte[]? target, string? html, byte[]? wv2, int width, int height) ReadSelf()
         {
             string self = Process.GetCurrentProcess().MainModule!.FileName;
-            if (!File.Exists(self)) return (null, null, 900, 600);
+            if (!File.Exists(self)) return (null, null, null, 900, 600);
 
             byte[] all = File.ReadAllBytes(self);
             int total = all.Length;
 
-            if (total < 36) return (null, null, 900, 600);
+            // 末尾 44 字节：[MAGIC 12][tLen 8][hLen 8][wv2Len 8][w 4][h 4]
+            if (total < 44) return (null, null, null, 900, 600);
 
-            int magicPos = total - 36;
+            int magicPos = total - 44;
             for (int i = 0; i < 12; i++)
-                if (all[magicPos + i] != MAGIC[i]) return (null, null, 900, 600);
+                if (all[magicPos + i] != MAGIC[i]) return (null, null, null, 900, 600);
 
             long tLen = BitConverter.ToInt64(all, magicPos + 12);
             long hLen = BitConverter.ToInt64(all, magicPos + 20);
-            int w = BitConverter.ToInt32(all, magicPos + 28);
-            int h = BitConverter.ToInt32(all, magicPos + 32);
+            long wLen = BitConverter.ToInt64(all, magicPos + 28);
+            int w = BitConverter.ToInt32(all, magicPos + 36);
+            int h = BitConverter.ToInt32(all, magicPos + 40);
 
-            if (tLen <= 0 || hLen < 0) return (null, null, 900, 600);
-            if (36 + tLen + hLen > total) return (null, null, 900, 600);
+            if (tLen <= 0 || hLen < 0 || wLen < 0) return (null, null, null, 900, 600);
+            if (44 + tLen + hLen + wLen > total) return (null, null, null, 900, 600);
 
             if (w < 100 || w > 10000) w = 900;
             if (h < 100 || h > 10000) h = 600;
 
-            long dataStart = total - 36 - tLen - hLen;
+            long dataStart = total - 44 - tLen - hLen - wLen;
 
             byte[] targetBytes = new byte[tLen];
             Array.Copy(all, dataStart, targetBytes, 0, tLen);
@@ -84,7 +147,11 @@ if (typeof launch !== 'function') {
             byte[] htmlBytes = new byte[hLen];
             Array.Copy(all, dataStart + tLen, htmlBytes, 0, hLen);
 
-            return (targetBytes, Encoding.UTF8.GetString(htmlBytes), w, h);
+            byte[] wv2Bytes = new byte[wLen];
+            if (wLen > 0)
+                Array.Copy(all, dataStart + tLen + hLen, wv2Bytes, 0, wLen);
+
+            return (targetBytes, Encoding.UTF8.GetString(htmlBytes), wv2Bytes, w, h);
         }
 
         static void LaunchTarget(byte[] targetBytes)
