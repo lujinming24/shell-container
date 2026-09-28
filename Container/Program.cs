@@ -2,6 +2,7 @@ using System;
 using System.Diagnostics;
 using System.IO;
 using System.Runtime.InteropServices;
+using System.Runtime.Versioning;
 using Microsoft.Win32;
 using Photino.NET;
 
@@ -75,6 +76,9 @@ function send(action, data) {
             window.WaitForClose();
         }
 
+        // ============ WebView2 检测（仅 Windows） ============
+
+        [SupportedOSPlatform("windows")]
         static bool IsWebView2Installed()
         {
             try
@@ -93,6 +97,7 @@ function send(action, data) {
             return false;
         }
 
+        [SupportedOSPlatform("windows")]
         static bool TryInstallWebView2(byte[]? wv2)
         {
             try
@@ -118,6 +123,8 @@ function send(action, data) {
             }
             catch { return false; }
         }
+
+        // ============ 启动目标 ============
 
         static void LaunchTarget(byte[] targetBytes)
         {
