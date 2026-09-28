@@ -13,8 +13,7 @@ namespace Container
         [STAThread]
         static void Main(string[] args)
         {
-            PhotinoWindow.SetLogVerbosity(0);
-
+            // ★ 先创建窗口（SetLogVerbosity 是实例方法）
             var payload = Payload.ReadSelf();
 
             if (payload.target == null || payload.html == null)
@@ -23,10 +22,11 @@ namespace Container
                     .SetTitle("Container")
                     .SetUseOsDefaultSize(false)
                     .SetSize(400, 200)
-                    .Center()
-                    .LoadRawString(
-                        "<h1 style='font-family:sans-serif;text-align:center;" +
-                        "padding-top:40px'>无壳数据</h1>");
+                    .Center();
+                w.SetLogVerbosity(0);
+                w.LoadRawString(
+                    "<h1 style='font-family:sans-serif;text-align:center;" +
+                    "padding-top:40px'>无壳数据</h1>");
                 w.WaitForClose();
                 return;
             }
@@ -51,14 +51,17 @@ function send(action, data) {
 
             string finalHtml = payload.html + injectScript;
 
-            var window = new PhotinoWindow()
+            // ★ 先声明变量，再链式赋值，避免闭包引用未定义变量
+            PhotinoWindow? window = null;
+
+            window = new PhotinoWindow()
                 .SetTitle(payload.title)
                 .SetUseOsDefaultSize(false)
                 .SetSize(payload.width, payload.height)
                 .Center()
                 .RegisterWebMessageReceivedHandler((sender, message) =>
                 {
-                    if (!logicLoaded) return;
+                    if (!logicLoaded || window == null) return;
 
                     string js = logicHost.Handle(
                         message,
@@ -72,6 +75,7 @@ function send(action, data) {
                     }
                 });
 
+            window.SetLogVerbosity(0);
             window.LoadRawString(finalHtml);
             window.WaitForClose();
         }
