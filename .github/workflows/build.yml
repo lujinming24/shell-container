@@ -11,10 +11,13 @@ jobs:
       matrix:
         include:
           - os: windows-latest
+            rid: win-x64
             artifact: container-windows
           - os: macos-latest
+            rid: osx-x64
             artifact: container-macos
           - os: ubuntu-latest
+            rid: linux-x64
             artifact: container-linux
 
     runs-on: ${{ matrix.os }}
@@ -22,23 +25,36 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Linux deps
-        if: runner.os == 'Linux'
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Publish
+        shell: bash
         run: |
-          sudo apt-get update
-          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev
+          dotnet publish Container/Container.csproj \
+            -c Release \
+            -r ${{ matrix.rid }} \
+            --self-contained true \
+            -p:PublishSingleFile=true \
+            -p:IncludeNativeLibrariesForSelfExtract=true \
+            -o out
 
-      - name: Configure
-        run: cmake -B build -DCMAKE_BUILD_TYPE=Release
-
-      - name: Build
-        run: cmake --build build --config Release
+      - name: Rename artifact
+        shell: bash
+        run: |
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            mv out/Container.exe out/container.exe
+          else
+            mv out/Container out/container
+          fi
 
       - name: Upload
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact }}
           path: |
-            build/Release/container.exe
-            build/container
+            out/container.exe
+            out/container
           if-no-files-found: ignore
