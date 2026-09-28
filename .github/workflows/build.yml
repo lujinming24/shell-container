@@ -6,55 +6,91 @@ on:
   workflow_dispatch:
 
 jobs:
-  build:
-    strategy:
-      matrix:
-        include:
-          - os: windows-latest
-            rid: win-x64
-            artifact: container-windows
-          - os: macos-latest
-            rid: osx-x64
-            artifact: container-macos
-          - os: ubuntu-latest
-            rid: linux-x64
-            artifact: container-linux
-
-    runs-on: ${{ matrix.os }}
-
+  # Windows: WPF + WebView2
+  build-windows:
+    runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
-
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '8.0.x'
+      - name: Publish
+        shell: pwsh
+        run: |
+          dotnet publish Container.Windows/Container.Windows.csproj `
+            -c Release `
+            -r win-x64 `
+            --self-contained true `
+            -p:PublishSingleFile=true `
+            -p:IncludeNativeLibrariesForSelfExtract=true `
+            -o out
+      - name: Rename
+        shell: pwsh
+        run: |
+          if (Test-Path out/Container.exe) {
+            Move-Item out/Container.exe out/container.exe
+          }
+      - name: Upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: container-windows
+          path: out/container.exe
 
+  # macOS: Photino
+  build-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
       - name: Publish
         shell: bash
         run: |
-          dotnet publish Container/Container.csproj \
+          dotnet publish Container.Photino/Container.Photino.csproj \
             -c Release \
-            -r ${{ matrix.rid }} \
+            -r osx-x64 \
             --self-contained true \
             -p:PublishSingleFile=true \
             -p:IncludeNativeLibrariesForSelfExtract=true \
             -o out
-
-      - name: Rename artifact
+      - name: Rename
         shell: bash
         run: |
-          if [ -f out/Container.exe ]; then
-            mv out/Container.exe out/container.exe
-          elif [ -f out/Container ]; then
-            mv out/Container out/container
-          fi
-
+          if [ -f out/Container ]; then mv out/Container out/container; fi
       - name: Upload
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.artifact }}
-          path: |
-            out/container.exe
-            out/container
-          if-no-files-found: ignore
+          name: container-macos
+          path: out/container
+
+  # Linux: Photino
+  build-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Publish
+        shell: bash
+        run: |
+          dotnet publish Container.Photino/Container.Photino.csproj \
+            -c Release \
+            -r linux-x64 \
+            --self-contained true \
+            -p:PublishSingleFile=true \
+            -p:IncludeNativeLibrariesForSelfExtract=true \
+            -o out
+      - name: Rename
+        shell: bash
+        run: |
+          if [ -f out/Container ]; then mv out/Container out/container; fi
+      - name: Upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: container-linux
+          path: out/container
