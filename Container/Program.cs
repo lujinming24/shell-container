@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
+using Microsoft.Win32;
 using Photino.NET;
 
 namespace Container
@@ -28,15 +29,12 @@ namespace Container
                 return;
             }
 
-            // WebView2 检测：直接尝试创建环境
-            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            // WebView2 检测（注册表方式）
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows) && !IsWebView2Installed())
             {
-                if (!IsWebView2Available())
+                if (!TryInstallWebView2(payload.wv2))
                 {
-                    if (!TryInstallWebView2(payload.wv2))
-                    {
-                        return;
-                    }
+                    return;
                 }
             }
 
@@ -90,22 +88,25 @@ if (window.external && window.external.receiveMessage) {
             window.WaitForClose();
         }
 
-        // ============ WebView2 检测（直接尝试创建环境） ============
+        // ============ WebView2 检测（注册表） ============
 
-        static bool IsWebView2Available()
+        [SupportedOSPlatform("windows")]
+        static bool IsWebView2Installed()
         {
             try
             {
-                var env = Microsoft.Web.WebView2.Core.CoreWebView2Environment
-                    .CreateAsync(null, null, null)
-                    .GetAwaiter()
-                    .GetResult();
-                return env != null;
+                using var hklm = RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, RegistryView.Registry32);
+                using var k1 = hklm.OpenSubKey(
+                    @"SOFTWARE\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}");
+                if (k1 != null) return true;
+
+                using var hkcu = RegistryKey.OpenBaseKey(RegistryHive.CurrentUser, RegistryView.Registry32);
+                using var k2 = hkcu.OpenSubKey(
+                    @"SOFTWARE\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}");
+                if (k2 != null) return true;
             }
-            catch
-            {
-                return false;
-            }
+            catch { }
+            return false;
         }
 
         // ============ WebView2 安装 ============
