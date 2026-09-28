@@ -14,7 +14,7 @@ namespace Container
 
         static void Log(string msg)
         {
-          try
+            try
             {
                 string path = Path.Combine(
                     Environment.GetFolderPath(Environment.SpecialFolder.Desktop),
@@ -31,7 +31,14 @@ namespace Container
         static void Main(string[] args)
         {
             // 清空旧日志
-            try { File.Delete(@"C:\container_timing.log"); } catch { }
+            try
+            {
+                string path = Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.Desktop),
+                    "container_timing.log");
+                File.Delete(path);
+            }
+            catch { }
 
             _sw.Start();
             Log("=== 程序开始 ===");
@@ -45,7 +52,7 @@ namespace Container
 
             if (payload.target == null || payload.html == null)
             {
-                Log("无壳数据，弹提示窗口");
+                Log("无壳数据");
                 var w = new PhotinoWindow()
                     .SetTitle("Container")
                     .SetUseOsDefaultSize(false)
@@ -55,26 +62,18 @@ namespace Container
                 w.LoadRawString(
                     "<h1 style='font-family:sans-serif;text-align:center;" +
                     "padding-top:40px'>无壳数据</h1>");
-                Log("无壳数据窗口已创建，等关闭");
                 w.WaitForClose();
-                Log("无壳数据窗口关闭");
                 return;
             }
 
-            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows) && !IsWebView2Installed())
-            {
-                Log("WebView2 未安装，开始安装");
-                if (!TryInstallWebView2(payload.wv2))
-                {
-                    Log("WebView2 安装失败");
-                    return;
-                }
-                Log("WebView2 安装完成");
-            }
-            else
-            {
-                Log("WebView2 已安装或非 Windows 平台");
-            }
+            // ★ 临时跳过 WebView2 检测和安装（你机器已装）
+            // 正式版再恢复这段逻辑
+            // if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows) && !IsWebView2Installed())
+            // {
+            //     if (!TryInstallWebView2(payload.wv2))
+            //         return;
+            // }
+            Log("跳过 WebView2 检测");
 
             Log("开始加载 Logic.dll");
             var logicHost = new LogicHost();
@@ -121,7 +120,7 @@ if (window.external && window.external.receiveMessage) {
                     }
                 });
 
-            Log("PhotinoWindow 构造完成（链式调用结束）");
+            Log("PhotinoWindow 构造完成");
 
             window.SetLogVerbosity(0);
             Log("SetLogVerbosity 完成");
@@ -135,6 +134,7 @@ if (window.external && window.external.receiveMessage) {
             Log("=== 窗口关闭，程序退出 ===");
         }
 
+        // 这两个方法保留着，正式版会用
         [SupportedOSPlatform("windows")]
         static bool IsWebView2Installed()
         {
