@@ -15,16 +15,16 @@ namespace Container
         static void Log(string msg)
         {
           try
-    {
-        string path = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.Desktop),
-            "container_timing.log");
-        File.AppendAllText(path,
-            DateTime.Now.ToString("HH:mm:ss.fff") +
-            "  +" + _sw.ElapsedMilliseconds + "ms  " +
-            msg + "\r\n");
-    }
-    catch { }
+            {
+                string path = Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.Desktop),
+                    "container_timing.log");
+                File.AppendAllText(path,
+                    DateTime.Now.ToString("HH:mm:ss.fff") +
+                    "  +" + _sw.ElapsedMilliseconds + "ms  " +
+                    msg + "\r\n");
+            }
+            catch { }
         }
 
         [STAThread]
