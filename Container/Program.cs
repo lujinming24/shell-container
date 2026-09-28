@@ -3,7 +3,6 @@ using System.Diagnostics;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
-using Microsoft.Win32;
 using Photino.NET;
 
 namespace Container
@@ -29,13 +28,15 @@ namespace Container
                 return;
             }
 
-            // WebView2 检测与安装
-            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows) && !IsWebView2Installed())
+            // WebView2 检测：直接尝试创建环境
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
             {
-                if (!TryInstallWebView2(payload.wv2))
+                if (!IsWebView2Available())
                 {
-                    // 安装失败
-                    return;
+                    if (!TryInstallWebView2(payload.wv2))
+                    {
+                        return;
+                    }
                 }
             }
 
@@ -89,26 +90,25 @@ if (window.external && window.external.receiveMessage) {
             window.WaitForClose();
         }
 
-        // ============ WebView2 检测与安装 ============
+        // ============ WebView2 检测（直接尝试创建环境） ============
 
-        [SupportedOSPlatform("windows")]
-        static bool IsWebView2Installed()
+        static bool IsWebView2Available()
         {
             try
             {
-                using var hklm = RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, RegistryView.Registry32);
-                using var k1 = hklm.OpenSubKey(
-                    @"SOFTWARE\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}");
-                if (k1 != null) return true;
-
-                using var hkcu = RegistryKey.OpenBaseKey(RegistryHive.CurrentUser, RegistryView.Registry32);
-                using var k2 = hkcu.OpenSubKey(
-                    @"SOFTWARE\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}");
-                if (k2 != null) return true;
+                var env = Microsoft.Web.WebView2.Core.CoreWebView2Environment
+                    .CreateAsync(null, null, null)
+                    .GetAwaiter()
+                    .GetResult();
+                return env != null;
             }
-            catch { }
-            return false;
+            catch
+            {
+                return false;
+            }
         }
+
+        // ============ WebView2 安装 ============
 
         [SupportedOSPlatform("windows")]
         static bool TryInstallWebView2(byte[]? wv2)
