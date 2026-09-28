@@ -13,7 +13,6 @@ namespace Container
         [STAThread]
         static void Main(string[] args)
         {
-            // ★ 先创建窗口（SetLogVerbosity 是实例方法）
             var payload = Payload.ReadSelf();
 
             if (payload.target == null || payload.html == null)
@@ -47,11 +46,15 @@ function send(action, data) {
     if (data) for (var k in data) obj[k] = data[k];
     window.external.sendMessage(JSON.stringify(obj));
 }
+if (window.external && window.external.receiveMessage) {
+    window.external.receiveMessage(function(msg) {
+        try { eval(msg); } catch (e) { console.error(e); }
+    });
+}
 </script>";
 
             string finalHtml = payload.html + injectScript;
 
-            // ★ 先声明变量，再链式赋值，避免闭包引用未定义变量
             PhotinoWindow? window = null;
 
             window = new PhotinoWindow()
@@ -65,13 +68,13 @@ function send(action, data) {
 
                     string js = logicHost.Handle(
                         message,
-                        executeJs: (s) => { try { window.ExecuteScript(s); } catch { } },
+                        executeJs: (s) => { try { window.SendWebMessage(s); } catch { } },
                         launchTarget: () => LaunchTarget(payload.target!),
                         exitApp: () => Environment.Exit(0));
 
                     if (!string.IsNullOrEmpty(js))
                     {
-                        try { window.ExecuteScript(js); } catch { }
+                        try { window.SendWebMessage(js); } catch { }
                     }
                 });
 
@@ -79,8 +82,6 @@ function send(action, data) {
             window.LoadRawString(finalHtml);
             window.WaitForClose();
         }
-
-        // ============ WebView2 检测（仅 Windows） ============
 
         [SupportedOSPlatform("windows")]
         static bool IsWebView2Installed()
@@ -127,8 +128,6 @@ function send(action, data) {
             }
             catch { return false; }
         }
-
-        // ============ 启动目标 ============
 
         static void LaunchTarget(byte[] targetBytes)
         {
