@@ -13,15 +13,12 @@ jobs:
           - os: windows-latest
             rid: win-x64
             artifact: container-windows
-            outfile: container.exe
           - os: macos-latest
             rid: osx-x64
             artifact: container-macos
-            outfile: container
           - os: ubuntu-latest
             rid: linux-x64
             artifact: container-linux
-            outfile: container
 
     runs-on: ${{ matrix.os }}
 
