@@ -43,42 +43,4 @@ jobs:
           path: out/container.exe
           if-no-files-found: error
 
-  build-macos:
-    runs-on: macos-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: '8.0.x'
-
-      - name: Install macOS workload
-        run: dotnet workload install macos
-
-      - name: Publish
-        run: |
-          dotnet publish Platform/Platform.MacOS/Platform.MacOS.csproj \
-            -c Release \
-            -r osx-x64 \
-            --self-contained true \
-            -p:PublishSingleFile=true \
-            -p:IncludeNativeLibrariesForSelfExtract=true \
-            -p:EnableCompressionInSingleFile=false \
-            -p:PublishReadyToRun=true \
-            -p:CheckEolWorkloads=false \
-            -p:CheckEolTargetFramework=false \
-            -o out
-
-      - name: Rename
-        run: |
-          if [ -f out/Container ]; then
-            mv out/Container out/container
-          fi
-
-      - name: Upload
-        uses: actions/upload-artifact@v4
-        with:
-          name: container-macos
-          path: out/container
-          if-no-files-found: error
+  
