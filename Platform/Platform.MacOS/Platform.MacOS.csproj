@@ -7,8 +7,7 @@
     <LangVersion>latest</LangVersion>
     <RootNamespace>ShellContainer</RootNamespace>
     <AssemblyName>Container</AssemblyName>
-    <SupportedOSPlatformVersion>11.0</SupportedOSPlatformVersion>
-    <TargetPlatformVersion>11.0</TargetPlatformVersion>
+    <SupportedOSPlatformVersion>1.0</SupportedOSPlatformVersion>
     <RuntimeIdentifier>osx-x64</RuntimeIdentifier>
     <SelfContained>true</SelfContained>
     <PublishSingleFile>true</PublishSingleFile>
