@@ -66,6 +66,7 @@ jobs:
             -p:IncludeNativeLibrariesForSelfExtract=true \
             -p:EnableCompressionInSingleFile=false \
             -p:PublishReadyToRun=true \
+            -p:CheckEolWorkloads=false \
             -p:CheckEolTargetFramework=false \
             -o out
 
