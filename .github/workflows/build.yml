@@ -45,7 +45,7 @@ jobs:
           if-no-files-found: error
 
   # ==================== macOS: .NET + WKWebView ====================
-  build-macos:
+   build-macos:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
@@ -54,6 +54,9 @@ jobs:
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '8.0.x'
+
+      - name: Install macOS workload
+        run: dotnet workload install macos
 
       - name: Publish
         run: |
