@@ -6,22 +6,9 @@ on:
   workflow_dispatch:
 
 jobs:
-  build:
-    strategy:
-      matrix:
-        include:
-          - os: windows-latest
-            rid: win-x64
-            artifact: container-windows
-          - os: macos-latest
-            rid: osx-x64
-            artifact: container-macos
-          - os: ubuntu-latest
-            rid: linux-x64
-            artifact: container-linux
-
-    runs-on: ${{ matrix.os }}
-
+  # ==================== Windows: WPF + WebView2 ====================
+  build-windows:
+    runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
 
@@ -31,30 +18,107 @@ jobs:
           dotnet-version: '8.0.x'
 
       - name: Publish
-        shell: bash
+        shell: pwsh
         run: |
-          dotnet publish Container/Container.csproj \
-            -c Release \
-            -r ${{ matrix.rid }} \
-            --self-contained true \
-            -p:PublishSingleFile=true \
-            -p:IncludeNativeLibrariesForSelfExtract=true \
+          dotnet publish Platform/Platform.Windows/Platform.Windows.csproj `
+            -c Release `
+            -r win-x64 `
+            --self-contained true `
+            -p:PublishSingleFile=true `
+            -p:IncludeNativeLibrariesForSelfExtract=true `
+            -p:EnableCompressionInSingleFile=false `
+            -p:PublishReadyToRun=true `
             -o out
 
       - name: Rename
-        shell: bash
+        shell: pwsh
         run: |
-          if [ -f out/Container.exe ]; then
-            mv out/Container.exe out/container.exe
-          elif [ -f out/Container ]; then
+          if (Test-Path out/Container.exe) {
+            Move-Item out/Container.exe out/container.exe
+          }
+
+      - name: Upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: container-windows
+          path: out/container.exe
+          if-no-files-found: error
+
+  # ==================== macOS: .NET + WKWebView ====================
+  build-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Publish
+        run: |
+          dotnet publish Platform/Platform.MacOS/Platform.MacOS.csproj \
+            -c Release \
+            -r osx-x64 \
+            --self-contained true \
+            -p:PublishSingleFile=true \
+            -p:IncludeNativeLibrariesForSelfExtract=true \
+            -p:EnableCompressionInSingleFile=false \
+            -p:PublishReadyToRun=true \
+            -o out
+
+      - name: Rename
+        run: |
+          if [ -f out/Container ]; then
             mv out/Container out/container
           fi
 
       - name: Upload
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.artifact }}
-          path: |
-            out/container.exe
-            out/container
-          if-no-files-found: ignore
+          name: container-macos
+          path: out/container
+          if-no-files-found: error
+
+  # ==================== Linux: GTKSharp + WebKit2GTK ====================
+  build-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install GTK / WebKit2GTK deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libgtk-3-dev \
+            libwebkit2gtk-4.1-dev
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Publish
+        run: |
+          dotnet publish Platform/Platform.Linux/Platform.Linux.csproj \
+            -c Release \
+            -r linux-x64 \
+            --self-contained true \
+            -p:PublishSingleFile=true \
+            -p:IncludeNativeLibrariesForSelfExtract=true \
+            -p:EnableCompressionInSingleFile=false \
+            -p:PublishReadyToRun=true \
+            -o out
+
+      - name: Rename
+        run: |
+          if [ -f out/Container ]; then
+            mv out/Container out/container
+          fi
+
+      - name: Upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: container-linux
+          path: out/container
+          if-no-files-found: error
