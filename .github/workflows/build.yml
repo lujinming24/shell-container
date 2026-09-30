@@ -6,7 +6,6 @@ on:
   workflow_dispatch:
 
 jobs:
-  # ==================== Windows: WPF + WebView2 ====================
   build-windows:
     runs-on: windows-latest
     steps:
@@ -44,8 +43,7 @@ jobs:
           path: out/container.exe
           if-no-files-found: error
 
-  # ==================== macOS: .NET + WKWebView ====================
-   build-macos:
+  build-macos:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
@@ -80,48 +78,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: container-macos
-          path: out/container
-          if-no-files-found: error
-
-  # ==================== Linux: GTKSharp + WebKit2GTK ====================
-  build-linux:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install GTK / WebKit2GTK deps
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            libgtk-3-dev \
-            libwebkit2gtk-4.1-dev
-
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: '8.0.x'
-
-      - name: Publish
-        run: |
-          dotnet publish Platform/Platform.Linux/Platform.Linux.csproj \
-            -c Release \
-            -r linux-x64 \
-            --self-contained true \
-            -p:PublishSingleFile=true \
-            -p:IncludeNativeLibrariesForSelfExtract=true \
-            -p:EnableCompressionInSingleFile=false \
-            -p:PublishReadyToRun=true \
-            -o out
-
-      - name: Rename
-        run: |
-          if [ -f out/Container ]; then
-            mv out/Container out/container
-          fi
-
-      - name: Upload
-        uses: actions/upload-artifact@v4
-        with:
-          name: container-linux
           path: out/container
           if-no-files-found: error
